@@ -11,13 +11,6 @@ public class Database implements AutoCloseable {
         driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password));
     }
 
-    /* TRANSAZIONE TIPO PER INVIARE UNA QUERY AL DATABASE
-        try (Transaction tx = driver.session().beginTransaction()) {
-            tx.run("MATCH (n) DELETE n");
-            tx.commit();
-        }
-     */
-
     //Chiude la comunicazione con il database
     @Override
     public void close() {
@@ -53,12 +46,12 @@ public class Database implements AutoCloseable {
     }
 
     //Formati dei vettori e liste inviati dal crawler
-    //matchdata -> [editionName, date, firstPlayer, secondPlayer, result, firstPlayerResult, secondPlayerResult, location, duration]
+    //matchdata -> [editionName, date, firstPlayer, secondPlayer, result, firstPlayerResult, secondPlayerResult, location, field, round, length]
     //matchstatistics -> {STATISTICHE PARTITA, STATISTICHE SET 1, STATISTICHE SET 2, STATISTICHE SET 3,...}
     //matchhistory -> [[0-1,1-1,...],[0-1,1-1,....],...]
     //quotes -> [bookmaker1: quota1-quota2, bookmaker2:quota1-quota2,...]
     public void addMatch(String[] matchdata, List<List<String>> matchstatistics, List<List<String>> matchhistory, List<String> quotes) {
-        String editionName, date, firstPlayer, result, secondPlayer, firstPlayerResult, secondPlayerResult, location, duration;
+        String editionName, date, firstPlayer, result, secondPlayer, firstPlayerResult, secondPlayerResult, location, field, round, length;
 
         editionName = matchdata[0];
         date = matchdata[1];
@@ -68,7 +61,9 @@ public class Database implements AutoCloseable {
         firstPlayerResult = matchdata[5];
         secondPlayerResult = matchdata[6];
         location = matchdata[7];
-        duration = matchdata[8];
+        field = matchdata[8];
+        round = matchdata[9];
+        length = matchdata[10];
 
         String statistics = "";
         if (!matchstatistics.isEmpty()) {
@@ -82,7 +77,8 @@ public class Database implements AutoCloseable {
         String history = "";
         if (!matchhistory.isEmpty()) {
             for (int i = 0; i < matchhistory.size(); i++) {
-                history += "m.set" + i + 1 + "History=" + matchhistory.get(i) + ", ";
+                int j = i + 1;
+                history += "m.set" + j + "History=" + matchhistory.get(i) + ", ";
             }
         }
 
@@ -103,13 +99,14 @@ public class Database implements AutoCloseable {
             tx.run("MATCH (n:Edition), (l:Player), (k:Player) " +
                             "WHERE n.edName=$edName AND l.playerName=$firstPlayer and k.playerName=$secondPlayer " +
                             "CREATE (m:Game) SET m.date=$date, m.result=$result, m.firstPlayer=$firstPlayerGame, m.secondPlayer=$secondPlayerGame, " +
-                            "m.location=$location, m.duration=$duration, " +
+                            "m.location=$location, m.field=$field, m.round=$round, m.length=$length, " +
                             statistics + "" + history +
                             "m.quotes=$quotes " +
                             "CREATE (n)<-[:GameOf]-(m), (m)<-[:PlayedIn {result:$playerResult1}]-(l), (m)<-[:PlayedIn {result:$playerResult2}]-(k)",
                     parameters("edName", editionName, "firstPlayer", firstPlayer, "secondPlayer", secondPlayer,
                             "date", date, "result", result, "firstPlayerGame", firstPlayer, "secondPlayerGame", secondPlayer,
-                            "location", location, "duration", duration, "quotes", quotes, "playerResult1", firstPlayerResult, "playerResult2", secondPlayerResult));
+                            "location", location, "field", field, "round", round, "length", length, "quotes", quotes,
+                            "playerResult1", firstPlayerResult, "playerResult2", secondPlayerResult));
             tx.commit();
         }
     }

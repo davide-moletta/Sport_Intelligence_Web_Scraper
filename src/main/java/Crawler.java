@@ -23,6 +23,7 @@ public class Crawler {
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless", "--disable-gpu", "--window-size=1920,1200", "--ignore-certificate-errors", "--disable-extensions", "--no-sandbox", "--disable-dev-shm-usage");
         driver = new ChromeDriver(options);
+
         //Apre il browser al link indicato
         driver.get("https://www.diretta.it/tennis/atp-singolare/");
 
@@ -102,6 +103,7 @@ public class Crawler {
         int i = 0;
 
         for (String ATPedition : ATPeditions) {
+            System.out.println(editionNames.get(i));
             //Apre la pagina dei risultati dell'edizione
             driver.get(ATPedition + "risultati/");
 
@@ -136,7 +138,7 @@ public class Crawler {
                 switchWindow(mainWindow);
 
                 //Salva nel vettore le informazioni relative al match con questo formato
-                //[editionName, date, firstPlayer, secondPlayer, result, firstPlayerResult, secondPlayerResult, location, duration]
+                //[editionName, date, firstPlayer, secondPlayer, result, firstPlayerResult, secondPlayerResult, location, field, round, length]
                 matchdata = matchData(editionName);
 
                 //Controlla se esistono le tab per passare alla scheda statistiche, storico e quote, se le trova le apre e ne salva i dati
@@ -172,54 +174,93 @@ public class Crawler {
             }
             i++;
         }
+
     }
 
+    //[editionName, date, firstPlayer, secondPlayer, result, firstPlayerResult, secondPlayerResult, location, field, round, length]
     //Apre la pagina "Informazioni partita", ne raccoglie i dati e li salva in un vettore
     static String[] matchData(String editionName) {
-        String[] matchData = new String[9];
+        String[] matchData = new String[11];
 
         //Salva il nome dell'edizione
         matchData[0] = editionName;
         //Salva la data e l'ora in cui si è svolto il match
-        matchData[1] = driver.findElement(By.xpath("//*[@class='startTime___2oy0czV']/div")).getText();
+        matchData[1] = driver.findElement(By.xpath("//*[@class='duelParticipant__startTime']/div")).getText();
 
         //Salva i nomi di entrambi i giocatori
-        List<WebElement> players = driver.findElements(By.xpath("//*[@class='participantNameWrapper___3cGNQoU']/div/a"));
+        List<WebElement> players = driver.findElements(By.xpath("//*[@class='participant__participantNameWrapper']/div/a"));
         matchData[2] = players.get(0).getText();
         matchData[3] = players.get(1).getText();
 
         //Salva il punteggio finale del match
-        String score = driver.findElement(By.xpath("//*[@class='wrapper___3rU3Jah']")).getText();
+        String score = driver.findElement(By.xpath("//*[@class='detailScore__wrapper']")).getText();
 
         //Controlla se la partita è stata vinta per ritiro o normalmente
-        if (score.equals("-")) {
-            //VITTORIA PER RITIRO
-            //Se la partita finisce per ritiro imposta le stringhe come segue
-            matchData[4] = "Retire"; //Risultato
-            matchData[5] = "Retire"; //Risultato primo giocatore
-            matchData[6] = "Retire"; //Risultato secondo giocatore
-        } else {
-            //VITTORIA NORMALE
-            //Controlla quale dei due risultati è maggiore per capire chi ha vinto la partita
-            if (Integer.parseInt(score.split("\n")[0]) > Integer.parseInt(score.split("\n")[2])) {
-                matchData[5] = "Winner";
-                matchData[6] = "Loser";
+        if (driver.findElement(By.xpath("//*[@class='detailScore__status']/span")).getText().equals("Finale")) {
+            if (score.equals("-")) {
+                //NO DATA
+                matchData[4] = "no data";
+                matchData[5] = "no data";
+                matchData[6] = "no data";
             } else {
-                matchData[5] = "Loser";
-                matchData[6] = "Winner";
+                //VITTORIA NORMALE
+                //Controlla quale dei due risultati è maggiore per capire chi ha vinto la partita e salva i risultati di entrambi i giocatori
+                if (Integer.parseInt(score.split("\n")[0]) > Integer.parseInt(score.split("\n")[2])) {
+                    matchData[5] = "Winner";
+                    matchData[6] = "Loser";
+                } else {
+                    matchData[5] = "Loser";
+                    matchData[6] = "Winner";
+                }
+                //Salva il risultato
+                matchData[4] = score.split("\n")[0] + "-" + score.split("\n")[2];
             }
-            //Salva il risultato
-            matchData[4] = score.split("\n")[0] + "-" + score.split("\n")[2];
+        } else {
+            //VITTORIA RITIRO
+            if (checkElementExistence("//*[@class='detailScore__status']/span/div/a")) {
+                //Controlla quale dei due giocatori si è ritirato e in base al risultato salva chi ha perso e chi ha vinto
+                String retiredPlayer = driver.findElement(By.xpath("//*[@class='detailScore__status']/span/div/a")).getText();
+                if (retiredPlayer.equals(matchData[2])) {
+                    matchData[4] = "Victory by withdrawal";
+                    matchData[5] = "Retired";
+                    matchData[6] = "Winner";
+                } else if (retiredPlayer.equals(matchData[3])) {
+                    matchData[4] = "Victory by withdrawal";
+                    matchData[5] = "Winner";
+                    matchData[6] = "Retired";
+                } else {
+                    matchData[4] = "no data";
+                    matchData[5] = "no data";
+                    matchData[6] = "no data";
+                }
+            } else {
+                matchData[4] = "no data";
+                matchData[5] = "no data";
+                matchData[6] = "no data";
+            }
         }
 
-        //Salva i dati relativi alla superficie e il luogo in cui si è svolto il match
-        matchData[7] = driver.findElement(By.xpath("//*[@class='country___24Qe-aj']/a")).getText();
+        //Salva i dati relativi al luogo in cui si è svolto il match (posizione 7), superficie (posizione 8) e round (posizione 9)
+        matchData[7] = driver.findElement(By.xpath("//*[@class='tournamentHeader__country']/a")).getText().split(",")[0];
+        if (driver.findElement(By.xpath("//*[@class='tournamentHeader__country']/a")).getText().split(",").length > 1) {
+            String fieldAndInfo = driver.findElement(By.xpath("//*[@class='tournamentHeader__country']/a")).getText().split(",")[1];
+            if (fieldAndInfo.split("-").length > 1) {
+                matchData[8] = fieldAndInfo.split("-")[0];
+                matchData[9] = fieldAndInfo.split("-")[1];
+            } else {
+                matchData[8] = fieldAndInfo;
+                matchData[9] = "no data";
+            }
+        } else {
+            matchData[8] = "no data";
+            matchData[9] = "no data";
+        }
 
         //Se esiste salva la durata della partita
-        if (checkElementExistence("//*[@class='time___KK2Rji3 time--overall']")) {
-            matchData[8] = driver.findElement(By.xpath("//*[@class='time___KK2Rji3 time--overall']")).getText();
+        if (checkElementExistence("//*[@class='smh__time smh__time--overall']")) {
+            matchData[10] = driver.findElement(By.xpath("//*[@class='smh__time smh__time--overall']")).getText();
         } else {
-            matchData[8] = "DURATA MATCH NON TROVATA";
+            matchData[10] = "no data";
         }
 
         return matchData;
@@ -230,14 +271,14 @@ public class Crawler {
         List<List<String>> allStatistics = new ArrayList<>();
 
         //Raccoglie tutte le tab delle statistiche per il match e per i vari set
-        List<WebElement> tabs = driver.findElements(By.xpath("//*[@class='subTabs']/a"));
+        List<WebElement> tabs = driver.findElements(By.xpath("//*[@class='subTabs tabs__detail--sub']/a"));
 
         //Per ogni tab trovata la apre e richiama il metodo dataFetch
         for (WebElement tab : tabs) {
             tab.sendKeys(Keys.ENTER);
             Thread.sleep(500);
 
-            allStatistics.add(dataFetch("//*[@class='statCategory___33LOZ_7']"));
+            allStatistics.add(dataFetch("//*[@class='statCategory']"));
         }
 
         return allStatistics;
@@ -248,14 +289,14 @@ public class Crawler {
         List<List<String>> allGames = new ArrayList<>();
 
         //Raccoglie tutte le tab dello storico per i vari set
-        List<WebElement> tabs = driver.findElements(By.xpath("//*[@class='subTabs']/a"));
+        List<WebElement> tabs = driver.findElements(By.xpath("//*[@class='subTabs tabs__detail--sub']/a"));
 
         //Per ogni tab trovata la apre e richiama il metodo dataFetch
         for (WebElement tab : tabs) {
             tab.sendKeys(Keys.ENTER);
             Thread.sleep(500);
 
-            allGames.add(dataFetch("//*[@class='matchHistory___3SdQ7EQ ']"));
+            allGames.add(dataFetch("//*[@class='matchHistoryRow']"));
         }
 
         return allGames;
@@ -267,14 +308,14 @@ public class Crawler {
         List<String> data = new ArrayList<>();
 
         //Controlla a che classe appartengono gli elementi da raccogliere
-        if (elementClass.equals("//*[@class='statCategory___33LOZ_7']")) {
+        if (elementClass.equals("//*[@class='statCategory']")) {
             //Elementi del tipo statistica
             //Raccoglie gli elementi in una lista nel formato [Statistica: StatP1-StatP2]
             webElements = driver.findElements(By.xpath(elementClass));
 
             //Controlla che ci siano dei dati da raccogliere
             if (webElements.isEmpty()) {
-                data.add("IMPOSSIBILE TROVARE QUESTO DATO");
+                data.add("no data");
             } else {
                 for (WebElement element : webElements) {
                     data.add("\"" + element.getText().split("\n")[1] + ": " + element.getText().split("\n")[0] + "-" + element.getText().split("\n")[2] + "\"");
@@ -288,7 +329,7 @@ public class Crawler {
 
             //Controlla che ci siano dei dati da raccogliere
             if (webElements.isEmpty()) {
-                data.add("IMPOSSIBILE TROVARE QUESTO DATO");
+                data.add("no data");
             } else {
                 for (WebElement element : webElements) {
                     if (element.getText().split("\n")[0].equals("SERVIZIO PERSO")) {
@@ -307,12 +348,12 @@ public class Crawler {
         List<String> matchQuotes = new ArrayList<>(), bookmakers = new ArrayList<>(), quotes = new ArrayList<>();
 
         //Prende gli elementi delle quote e dei bookmaker dal sito
-        List<WebElement> rows = driver.findElements(By.xpath("//*[@class='ui table__row']"));
-        List<WebElement> webBookmakers = driver.findElements(By.xpath("//*[@class='bookmakerPart___2Vexll_']/div/a"));
+        List<WebElement> rows = driver.findElements(By.xpath("//*[@class='ui-table__row']"));
+        List<WebElement> webBookmakers = driver.findElements(By.xpath("//*[@class='oddsCell__bookmaker oddsCell__bookmakerCell ']/a"));
 
         //Se le liste sono vuote segnala che non sono stati trovati dati altrimenti raccoglie i dati trovati
         if (rows.isEmpty() || webBookmakers.isEmpty()) {
-            matchQuotes.add("IMPOSSIBILE TROVARE QUESTO DATO");
+            matchQuotes.add("no data");
         } else {
             //Aggiunge alla lista bookmaker il nome del bookmaker per ogni quota
             for (WebElement webBookmaker : webBookmakers) {
