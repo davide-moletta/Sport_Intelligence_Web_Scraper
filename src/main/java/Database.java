@@ -48,11 +48,35 @@ public class Database implements AutoCloseable {
     //Formati dei vettori e liste inviati dal crawler
     //matchdata -> [editionName, date, firstPlayer, secondPlayer, result, firstPlayerResult, secondPlayerResult, location, field, round, length]
     //matchstatistics -> {STATISTICHE PARTITA, STATISTICHE SET 1, STATISTICHE SET 2, STATISTICHE SET 3,...}
-    //matchhistory -> [[0-1,1-1,...],[0-1,1-1,....],...]
+    //matchhistory -> [[[STORICO SET 1], [STORICO SET 2], ...], [[TIEBREAK SET 1], [TIEBREAK SET 2], ...], [[FIFTEENS SET 1], [FIFTEENS SET 2], ...]]
     //quotes -> [bookmaker1: quota1-quota2, bookmaker2:quota1-quota2,...]
-    public void addMatch(String[] matchdata, List<List<String>> matchstatistics, List<List<String>> matchhistory, List<String> quotes) {
+    public void addMatch(String[] matchdata, List<List<String>> matchstatistics, List<List<List<String>>> matchhistory, List<String> quotes) {
         String editionName, date, firstPlayer, result, secondPlayer, firstPlayerResult, secondPlayerResult, location, field, round, length;
 
+        String statistics = "", games = "", tiebreaks = "", fifteens = "";
+
+        //Controlla se la lista dello sotrico set è vuota, se non lo è prende i dati di ogni lista e crea le query da inserire nel database
+        if (!matchhistory.isEmpty()) {
+            //Costruisce la query contenente i dati relativi ai game giocati per ogni set
+            for (int i = 0; i < matchhistory.get(0).size(); i++) {
+                int j = i + 1;
+                games += "m.set" + j + "Games=" + matchhistory.get(0).get(i) + ", ";
+            }
+
+            //Costruisce la query contenente i dati relativi agli eventuali tiebreak giocati per ogni set
+            for (int i = 0; i < matchhistory.get(1).size(); i++) {
+                int j = i + 1;
+                tiebreaks += "m.set" + j + "Tiebreaks=" + matchhistory.get(1).get(i) + ", ";
+            }
+
+            //Costruisce la query contenente i dati relativi ai fifteen per ogni set
+            for (int i = 0; i < matchhistory.get(2).size(); i++) {
+                int j = i + 1;
+                fifteens += "m.set" + j + "Fifteens=" + matchhistory.get(2).get(i) + ", ";
+            }
+        }
+
+        //Salva nelle variabili i dati relativi al match
         editionName = matchdata[0];
         date = matchdata[1];
         firstPlayer = matchdata[2];
@@ -65,25 +89,16 @@ public class Database implements AutoCloseable {
         round = matchdata[9];
         length = matchdata[10];
 
-        String statistics = "";
+        //Costruisce la query contenente i dati relativi alle statistiche di partita e per ogni set
         if (!matchstatistics.isEmpty()) {
             statistics = "m.matchStat=" + matchstatistics.get(0) + ", ";
-
             for (int i = 1; i < matchstatistics.size(); i++) {
                 statistics += "m.set" + i + "Stat=" + matchstatistics.get(i) + ", ";
             }
         }
 
-        String history = "";
-        if (!matchhistory.isEmpty()) {
-            for (int i = 0; i < matchhistory.size(); i++) {
-                int j = i + 1;
-                history += "m.set" + j + "History=" + matchhistory.get(i) + ", ";
-            }
-        }
-
         if (quotes.isEmpty()) {
-            quotes.add("QUOTE NON TROVATE PER QUESTA PARTITA");
+            quotes.add("no data");
         }
 
         //Controlla se i giocatori esistono già nel database, se esistono va avanti mentre se non esistono li crea
@@ -100,7 +115,7 @@ public class Database implements AutoCloseable {
                             "WHERE n.edName=$edName AND l.playerName=$firstPlayer and k.playerName=$secondPlayer " +
                             "CREATE (m:Game) SET m.date=$date, m.result=$result, m.firstPlayer=$firstPlayerGame, m.secondPlayer=$secondPlayerGame, " +
                             "m.location=$location, m.field=$field, m.round=$round, m.length=$length, " +
-                            statistics + "" + history +
+                            statistics + "" + games + "" + tiebreaks + "" + fifteens +
                             "m.quotes=$quotes " +
                             "CREATE (n)<-[:GameOf]-(m), (m)<-[:PlayedIn {result:$playerResult1}]-(l), (m)<-[:PlayedIn {result:$playerResult2}]-(k)",
                     parameters("edName", editionName, "firstPlayer", firstPlayer, "secondPlayer", secondPlayer,

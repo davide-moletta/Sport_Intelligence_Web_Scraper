@@ -44,11 +44,11 @@ public class Crawler {
         List<String> ATPs = new ArrayList<>();
 
         //Clicca il pulsante per aprire tutta la lista dei campionati del tipo ATP per poi prendere i vari link
-        driver.findElement(By.xpath("//*[@id='lmenu_5724']")).sendKeys(Keys.ENTER);
-        Thread.sleep(500);
+        driver.findElement(By.cssSelector("#lmenu_5724")).sendKeys(Keys.ENTER);
+        Thread.sleep(100);
 
         //Prende gli elementi specificati dal sito
-        WebATPs = driver.findElements(By.xpath("//*[@class='lmc__template ']/a"));
+        WebATPs = driver.findElements(By.className("lmc__templateHref"));
 
         //Cicla tutti gli elementi trovati per creare i vari nodi e salvare i link ai campionati nella lista ATPs che verrà poi usata per trovare le edizioni
         for (WebElement WebATP : WebATPs) {
@@ -74,7 +74,7 @@ public class Crawler {
             //Prende gli elementi delle edizioni dal sito
             WebATPeditions = driver.findElements(By.xpath("//*[@class='leagueTable__season']/div/a"));
             //Prende il nome del campionato ATP per cui stanno venendo raccolte le edizioni
-            ATPname = driver.findElement(By.xpath("//*[@class='teamHeader__name']")).getText();
+            ATPname = driver.findElement(By.className("teamHeader__name")).getText();
 
             //Cicla tutti gli elementi trovati
             for (WebElement WebATPedition : WebATPeditions) {
@@ -97,11 +97,13 @@ public class Crawler {
     static void findEditionsGame(List<String> ATPeditions, List<String> editionNames) throws InterruptedException {
         String mainWindow, editionName, matchId, matchCode;
         List<WebElement> matches;
-        String[] matchdata;
+        String[] match_data;
         List<String> quotes = new ArrayList<>();
-        List<List<String>> matchstatistics = new ArrayList<>(), matchhistory = new ArrayList<>();
+        List<List<String>> match_statistics = new ArrayList<>();
+        List<List<List<String>>> match_history = new ArrayList<>();
         int i = 0;
 
+        //Cicla tutte le edizioni per ogni torneo ATP
         for (String ATPedition : ATPeditions) {
             System.out.println(editionNames.get(i));
             //Apre la pagina dei risultati dell'edizione
@@ -113,7 +115,7 @@ public class Crawler {
             //Controlla se è presente il tasto per mostrare tutti i risultati (alcuni sono nascosti) e lo clicca finchè non sparisce
             while (checkElementExistence("//*[@id='live-table']/div[1]/div/div/a")) {
                 driver.findElement(By.xpath("//*[@id='live-table']/div[1]/div/div/a")).sendKeys(Keys.ENTER);
-                Thread.sleep(1000);
+                Thread.sleep(500);
             }
 
             //Prende tutti i match presenti sul sito per il torneo attuale
@@ -139,20 +141,21 @@ public class Crawler {
 
                 //Salva nel vettore le informazioni relative al match con questo formato
                 //[editionName, date, firstPlayer, secondPlayer, result, firstPlayerResult, secondPlayerResult, location, field, round, length]
-                matchdata = matchData(editionName);
+                match_data = matchData(editionName);
 
                 //Controlla se esistono le tab per passare alla scheda statistiche, storico e quote, se le trova le apre e ne salva i dati
                 if (checkElementExistence("//*[@href='#informazioni-partita/statistiche-partite']")) {
                     driver.findElement(By.xpath("//*[@href='#informazioni-partita/statistiche-partite']")).sendKeys(Keys.ENTER);
                     //Ottiene le statistiche della partita come una lista di liste di stringhe nel formato
                     //{STATISTICHE PARTITA, STATISTICHE SET 1, STATISTICHE SET 2, STATISTICHE SET 3, ...}
-                    matchstatistics = matchStatistics();
+                    match_statistics = matchStatistics();
                 }
                 if (checkElementExistence("//*[@href='#informazioni-partita/cronologia-dell-incontro']")) {
                     driver.findElement(By.xpath("//*[@href='#informazioni-partita/cronologia-dell-incontro']")).sendKeys(Keys.ENTER);
-                    //Ottiene tutti i dati della cronologia incontro come una lista di liste di stringhe nel formato
-                    // {{0-1,1-1,...}, {0-1,1-1,....}, ...} dove la prima lista indica il primo set mentre la seconda lista indica il secondo set etc.
-                    matchhistory = matchHistory();
+                    //Ottiene tutti i dati della cronologia incontro come una lista di liste di liste di stringhe nel formato
+                    //[[[STORICO SET 1], [STORICO SET 2], ...], [[TIEBREAK SET 1], [TIEBREAK SET 2], ...], [[FIFTEENS SET 1], [FIFTEENS SET 2], ...]]
+                    //dove la prima lista indica i game, la seconda indica i tiebreak e la terza indica i fifteens, il tutto per ogni set svolto
+                    match_history = matchHistory();
                 }
                 if (checkElementExistence("//*[@href='#comparazione-quote']")) {
                     driver.findElement(By.xpath("//*[@href='#comparazione-quote']")).sendKeys(Keys.ENTER);
@@ -161,11 +164,11 @@ public class Crawler {
                 }
 
                 //Invia i dati del match al database per salvarli
-                database.addMatch(matchdata, matchstatistics, matchhistory, quotes);
+                database.addMatch(match_data, match_statistics, match_history, quotes);
 
                 //Pulisce le liste prima di passare al match successivo
-                matchstatistics.clear();
-                matchhistory.clear();
+                match_statistics.clear();
+                match_history.clear();
                 quotes.clear();
 
                 //Chiude la tab aperta e torna alla pagina principale per passare al prossimo match
@@ -174,7 +177,6 @@ public class Crawler {
             }
             i++;
         }
-
     }
 
     //[editionName, date, firstPlayer, secondPlayer, result, firstPlayerResult, secondPlayerResult, location, field, round, length]
@@ -241,12 +243,12 @@ public class Crawler {
         }
 
         //Salva i dati relativi al luogo in cui si è svolto il match (posizione 7), superficie (posizione 8) e round (posizione 9)
-        matchData[7] = driver.findElement(By.xpath("//*[@class='tournamentHeader__country']/a")).getText().split(",")[0];
-        if (driver.findElement(By.xpath("//*[@class='tournamentHeader__country']/a")).getText().split(",").length > 1) {
-            String fieldAndInfo = driver.findElement(By.xpath("//*[@class='tournamentHeader__country']/a")).getText().split(",")[1];
-            if (fieldAndInfo.split("-").length > 1) {
-                matchData[8] = fieldAndInfo.split("-")[0];
-                matchData[9] = fieldAndInfo.split("-")[1];
+        matchData[7] = driver.findElement(By.xpath("//*[@class='tournamentHeader__country']/a")).getText().split(", ")[0];
+        if (driver.findElement(By.xpath("//*[@class='tournamentHeader__country']/a")).getText().split(", ").length > 1) {
+            String fieldAndInfo = driver.findElement(By.xpath("//*[@class='tournamentHeader__country']/a")).getText().split(", ")[1];
+            if (fieldAndInfo.split(" - ").length > 1) {
+                matchData[8] = fieldAndInfo.split(" - ")[0];
+                matchData[9] = fieldAndInfo.split(" - ")[1];
             } else {
                 matchData[8] = fieldAndInfo;
                 matchData[9] = "no data";
@@ -267,80 +269,145 @@ public class Crawler {
     }
 
     //Apre la pagina "Statistiche partita" e salva i dati della partita e di tutti i set presenti in una lista di liste
-    static List<List<String>> matchStatistics() throws InterruptedException {
+    static List<List<String>> matchStatistics() {
         List<List<String>> allStatistics = new ArrayList<>();
+        List<WebElement> webStatistics;
 
         //Raccoglie tutte le tab delle statistiche per il match e per i vari set
         List<WebElement> tabs = driver.findElements(By.xpath("//*[@class='subTabs tabs__detail--sub']/a"));
 
-        //Per ogni tab trovata la apre e richiama il metodo dataFetch
+        //Per ogni tab trovata la apre e raccoglie i dati richiesti
         for (WebElement tab : tabs) {
             tab.sendKeys(Keys.ENTER);
-            Thread.sleep(500);
 
-            allStatistics.add(dataFetch("//*[@class='statCategory']"));
+            List<String> statisticsData = new ArrayList<>();
+
+            //Raccoglie gli elementi in una lista nel formato [Statistica: StatP1-StatP2]
+            webStatistics = driver.findElements(By.xpath("//*[@class='statCategory']"));
+
+            //Controlla che ci siano dei dati da raccogliere
+            if (webStatistics.isEmpty()) {
+                statisticsData.add("\"no data\"");
+            } else {
+                //Aggiunge i dati trovati alla lista per il set attuale
+                for (WebElement webStatistic : webStatistics) {
+                    statisticsData.add("\"" + webStatistic.getText().split("\n")[1] + ": " + webStatistic.getText().split("\n")[0] + "-" + webStatistic.getText().split("\n")[2] + "\"");
+                }
+            }
+            //Aggiunge la lista creata alla lista allStatistics in modo da avere una lista per il match e una per ogni set
+            allStatistics.add(statisticsData);
         }
-
         return allStatistics;
     }
 
-    //Apre la pagina "Storico partita" e salva i dati di tutti i set presenti in una lista di liste
-    static List<List<String>> matchHistory() throws InterruptedException {
-        List<List<String>> allGames = new ArrayList<>();
+    //Apre la pagina "Storico partita" e salva i dati di tutti i set presenti in una lista di liste di liste
+    static List<List<List<String>>> matchHistory() {
+        List<List<List<String>>> allHistoryData = new ArrayList<>();
+
+        List<List<String>> allSets = new ArrayList<>();
+        List<List<String>> allTiebreaks = new ArrayList<>();
+        List<List<String>> allFifteens = new ArrayList<>();
+
+        boolean tiebreak = false;
 
         //Raccoglie tutte le tab dello storico per i vari set
         List<WebElement> tabs = driver.findElements(By.xpath("//*[@class='subTabs tabs__detail--sub']/a"));
 
-        //Per ogni tab trovata la apre e richiama il metodo dataFetch
+        //Per ogni tab trovata la apre e raccoglie i dati richiesti
         for (WebElement tab : tabs) {
             tab.sendKeys(Keys.ENTER);
-            Thread.sleep(500);
 
-            allGames.add(dataFetch("//*[@class='matchHistoryRow']"));
-        }
+            List<String> setData = new ArrayList<>();
+            List<String> tiebreakData = new ArrayList<>();
+            List<String> fifteenData = new ArrayList<>();
 
-        return allGames;
-    }
+            //Raccoglie i dati dal sito
+            List<WebElement> webHistories = driver.findElements(By.xpath("//*[@class='matchHistoryRow']/div[3]"));
 
-    //Raccoglie tutti gli elementi trovati con il dato XPATH e li salva in una lista che poi viene ritornata
-    static List<String> dataFetch(String elementClass) {
-        List<WebElement> webElements;
-        List<String> data = new ArrayList<>();
-
-        //Controlla a che classe appartengono gli elementi da raccogliere
-        if (elementClass.equals("//*[@class='statCategory']")) {
-            //Elementi del tipo statistica
-            //Raccoglie gli elementi in una lista nel formato [Statistica: StatP1-StatP2]
-            webElements = driver.findElements(By.xpath(elementClass));
-
-            //Controlla che ci siano dei dati da raccogliere
-            if (webElements.isEmpty()) {
-                data.add("no data");
+            //Controlla se sono presenti dei dati
+            if (webHistories.isEmpty()) {
+                setData.add("\"no data\"");
+                tiebreakData.add("\"no data\"");
+                fifteenData.add("\"no data\"");
             } else {
-                for (WebElement element : webElements) {
-                    data.add("\"" + element.getText().split("\n")[1] + ": " + element.getText().split("\n")[0] + "-" + element.getText().split("\n")[2] + "\"");
-                }
-            }
-            return data;
-        } else {
-            //Elementi del tipo storico
-            //Raccoglie gli elementi in una lista nel formato [P1-P2]
-            webElements = driver.findElements(By.xpath(elementClass));
+                for (WebElement webHistory : webHistories) {
+                    //Per ogni riga dello storico controlla se i dati vanno slavati nella lista del set o del tiebreak
+                    if (!tiebreak && webHistory.getText().split("\n").length > 3) {
+                        tiebreak = true;
 
-            //Controlla che ci siano dei dati da raccogliere
-            if (webElements.isEmpty()) {
-                data.add("no data");
-            } else {
-                for (WebElement element : webElements) {
-                    if (element.getText().split("\n")[0].equals("SERVIZIO PERSO")) {
-                        data.add("\"" + element.getText().split("\n")[1] + "-" + element.getText().split("\n")[3] + "\"");
+                        //Se è stato giocato un tiebreak il dato dell'ultima riga si presentava in questo modo es. 56-77 quindi va controllato come salvarlo e dove
+                        String[] games = webHistory.getText().split("\n");
+                        int firstPlayerGames, secondPlayerGames;
+
+                        //Controlla come è diviso il dato per capire quale numero va effettivamente raccolto
+                        if (games[1].equals("-")) {
+                            //Il primo non è diviso
+                            firstPlayerGames = Integer.parseInt(games[0]) % 10;
+
+                            if (games.length > 3) {
+                                //Il secondo è diviso
+                                secondPlayerGames = Integer.parseInt(games[2]);
+                            } else {
+                                //Il secondo non è diviso
+                                secondPlayerGames = Integer.parseInt(games[2]) / 10;
+                            }
+                        } else {
+                            //Il primo è diviso
+                            firstPlayerGames = Integer.parseInt(games[1]);
+                            if (games.length > 4) {
+                                //Il secondo è diviso
+                                secondPlayerGames = Integer.parseInt(games[3]);
+                            } else {
+                                //Il secondo non è diviso
+                                secondPlayerGames = Integer.parseInt(games[3]) / 10;
+                            }
+                        }
+
+                        setData.add("\"" + firstPlayerGames + "-" + secondPlayerGames + "\"");
                     } else {
-                        data.add("\"" + element.getText().split("\n")[0] + "-" + element.getText().split("\n")[2] + "\"");
+                        if (tiebreak) {
+                            //Salvo per i tiebreak
+                            tiebreakData.add("\"" + webHistory.getText().split("\n")[0] + "-" + webHistory.getText().split("\n")[2] + "\"");
+                        } else {
+                            //Salvo lo storico normale
+                            setData.add("\"" + webHistory.getText().split("\n")[0] + "-" + webHistory.getText().split("\n")[2] + "\"");
+                        }
                     }
                 }
+
+                if (tiebreakData.isEmpty()) {
+                    tiebreakData.add("\"no data\"");
+                }
+
+                //Raccoglie i dati relativi ai fifteen e li salva nella lista
+                List<WebElement> webFifteens = driver.findElements(By.xpath("//*[@class='matchHistoryRow__fifteens']"));
+                for (WebElement webFifteen : webFifteens) {
+                    String[] fifteens = webFifteen.getText().split("\n");
+                    String fifteen = "\"";
+
+                    for (int i = 0; i < fifteens.length; i++) {
+                        fifteen += fifteens[i];
+                    }
+                    fifteen += "\"";
+
+                    fifteenData.add(fifteen);
+                }
             }
-            return data;
+
+            //Aggiunge alle liste le liste create per ogni set e setta il flag tiebreak a false
+            allSets.add(setData);
+            allTiebreaks.add(tiebreakData);
+            allFifteens.add(fifteenData);
+
+            tiebreak = false;
         }
+
+        //Aggiunge le liste contenenti tutti i dati dei set nella lista allHistoryData e la ritorna
+        allHistoryData.add(allSets);
+        allHistoryData.add(allTiebreaks);
+        allHistoryData.add(allFifteens);
+
+        return allHistoryData;
     }
 
     //Apre la pagina "Comparazione quote", ne raccoglie i dati e li salva in una lista
@@ -353,7 +420,7 @@ public class Crawler {
 
         //Se le liste sono vuote segnala che non sono stati trovati dati altrimenti raccoglie i dati trovati
         if (rows.isEmpty() || webBookmakers.isEmpty()) {
-            matchQuotes.add("no data");
+            matchQuotes.add("\"no data\"");
         } else {
             //Aggiunge alla lista bookmaker il nome del bookmaker per ogni quota
             for (WebElement webBookmaker : webBookmakers) {
