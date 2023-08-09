@@ -2,7 +2,7 @@
 Selenium scraper + neo4j graph database
 
 
-Web scraper realizzato per raccogliere i dati relativi a tutti i tornei del tipo ATP singolare dal sito "diretta.it".
+Web scraper realizzato per raccogliere i dati relativi a tutti i tornei del tipo ATP singolare.
 I dati raccolti vengono elaborati e salvati in un database a grafo (neo4j).
 
 Esempio grafico dell'architettura del database (Caricherò al più presto il dump del database completo).
